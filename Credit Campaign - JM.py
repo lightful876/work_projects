@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Campaign Successes Analysis - Jamaica
+# Campaign Successes Analysis - Jamaica
+# This script was recorded at the request of management to create a dashboard/report detailing the features of the campaign respondents.
 
-# In[2]:
-
-
+# Loading packages 
 import pandas as pd
 import os
 import pyodbc
@@ -29,229 +28,96 @@ from sqlalchemy.engine.url import make_url'''
 import urllib.parse
 import openpyxl
 
-
-# In[53]:
-
-
-server = '10.192.26.32'
-database = 'CODS'
+#Connecxting to database
+server = 'example1'
+database = 'topic1'
 username = 'roy_shaw'
-password = 'SpriteVvs#41605***'
+password = 'reason1'
 cnxn = pyodbc.connect("Driver={ODBC Driver 17 for SQL Server};""Server=10.192.26.32;""Database=CODS;""trusted_connection=yes;""UID=roy_shaw;""PWD=SpriteVvs#41605***;")
 cursor = cnxn.cursor()
 
-
-# #### Change Date Here
-
-# In[54]:
-
+# SQL query to pull information for deliveries in the month and assigning the results of the query to a dataframe.
+# We also create an alias for the dataframe to avoid re-running the database query everytime we have an issue.
 
 df_campaign_success = pd.read_sql("SELECT * FROM CODS.dbo.[Credit.BookingsAndDeliveriesMar2023]",cnxn)
-
-
-# In[55]:
-
-
 filler_1 = df_campaign_success
 
-
-# In[56]:
-
-
+#Renaming these two columns to accomodate a join later in the script
 filler_1.rename(columns = {'Customer ID':'MasterIDNumber','Account Number':'Acctno'}, inplace = True)
 
-
-# #### Change Date Here
-
-# In[57]:
-
-
+# Reading in the customer data from the database and assigning the table to a dataframe.
+# Also we create an alias for the dataframe value to avoid re-running the script at every instance of an error.
 df_Control = pd.read_sql("SELECT * FROM CODS.dbo.[RPT_CL_HP_CUSTS_ACCT_SMRY] WHERE DateAcctOpen > '2023-03-01'",cnxn)
-
-
-# In[58]:
-
-
 filler_2 = df_Control
 
-
-# In[59]:
-
-
+#Renaming columns
 filler_2.rename(columns = {'Custid':'MasterIDNumber', 'Account_Number':'Acctno'}, inplace = True)
 
-
-# #### Change Date Here
-
-# In[60]:
-
-
+#Reading attributes of interest from the information from successful campaign conversions into a dataframe.
+#Aliasing for ease of reference and renaming a column for future join
 df_Master_Purchases = pd.read_sql("SELECT [CountryCustomerID], [MasterIDNumber], [Account Number] ,[CampaignCode], [Agreement Total], [Country], [Account Type], [Customer ID], [Date Account Opened], [Delivered Disbursed Date], [Delivery Status], [ISO], [Terms Type] FROM CODS.dbo.[vwCampaignSuccessMar2023]".format('db'),cnxn)
-
-
-# In[61]:
-
-
 filler_3 = df_Master_Purchases
-
-
-# In[62]:
-
-
 filler_3.rename(columns = {'Account Number':'Acctno'}, inplace = True)
-
-
-# In[63]:
-
-
 filler_3.drop(['Delivered Disbursed Date'], axis = 1, inplace = True)
 
-
-# #### Change Date Here
-
-# In[64]:
-
-
+#reading the campaign list from the database into a dataframe and aliasing
 df_main = pd.read_sql("SELECT * FROM [CODS].[dbo].[Credit.CampaignListMar2023]",cnxn)
-
-
-# In[65]:
-
-
 filler_4 = df_main
 
-
-# In[66]:
-
-
+#We merge the data for the campaign list with the campaign successes to remove values that don't occur in both instances (by the type of join).
 filler_4 = filler_4.merge(filler_1, on = 'MasterIDNumber', how = 'inner')
 
-
-# In[67]:
-
-
+#We check to ensure that the customer taken from the join was in fact issued a campaign blast with a boolean indicator.
 filler_4['Take-up Bool'] = filler_4['MasterIDNumber'].isin(filler_3['MasterIDNumber'])
 
+#Dropping extraneous columns.
+filler_4.drop(['firstname', 'name', 'RFCreditLimit', 'AvailableSpend', 'Arrears', 'HomeTel', 'WorkTel', 'MobileTel', 'OutstandingBalance', 'AgreementTotal', 'USDAvailableSpend', 'ArrearsUSD', 'DateSettled', 'MostRecentAccount', 'Delivered Disbursed Date', 'Agreement Total', 'Service Charge', 'Principle Amount', 'Terms Type', 'Account Type', 'Delivery Status', 'Country_y', 'ISO_y'], axis = 1, inplace = True)
 
-# Pre-FY23
-
-# In[68]:
-
-
-'''filler_4.drop(['Firstname', 'LastName', 'RFCreditLimit', 'AvailableSpend', 'HomeTel', 'WorkTel',              'MobileTel','OutstandingBalance', 'AgreementTotal', 'USDAvailableSpend',               'MostRecentAccount_x', 'Agreement Total', 'Service Charge', 'Principle Amount',              'Delivery Status', 'Country_y', 'ISO_y'], axis = 1, inplace = True)'''
-
-
-# In[69]:
-
-
-filler_4.columns
-
-
-# Post-FY23
-
-# In[70]:
-
-
-filler_4.drop(['firstname', 'name', 'RFCreditLimit', 'AvailableSpend', 'Arrears', 'HomeTel', 'WorkTel', 'MobileTel',              'OutstandingBalance', 'AgreementTotal', 'USDAvailableSpend', 'ArrearsUSD', 'DateSettled', 'MostRecentAccount',              'Delivered Disbursed Date', 'Agreement Total', 'Service Charge', 'Principle Amount', 'Terms Type', 'Account Type',              'Delivery Status', 'Country_y', 'ISO_y'],              axis = 1, inplace = True)
-
-
-# In[71]:
-
-
+# Filtering for values that correspond to Jamaica
 filler_4['Clean_Order'] = filler_4['ISO_x'].isin(['JM'])
 filler_4.drop(filler_4['Clean_Order'].index[filler_4['Clean_Order'] == False], axis = 0, inplace = True)
 
-
-# In[72]:
-
-
+# We filter the main dataframe for values that correspond to an individual being issued a campaign promotion.
 df_tkup_success = filler_4[filler_4['Take-up Bool'] == True]
 
-
-# In[73]:
-
-
+# Renaming an attribute to facilitate a join
 df_tkup_success = df_tkup_success.rename(columns = {'MostRecentAccount_y':'Acctno'})
 
-
-# In[74]:
-
-
+# We filter the dataframe to account for the instances where customers were not issued a campaign 
 df_tkup_fail = filler_4[filler_4['Take-up Bool'] == False]
 
-
-# In[75]:
-
-
+# We are looking to get the information on each customer by combining the outer merge function from 
 df_prod_camp_key = df_tkup_success.merge(filler_2, on = 'Acctno', how = 'outer')
 
-
-# In[76]:
-
-
+# Removing (if any) Na's from the primary and secondary key
 df_prod_camp_key = df_prod_camp_key.dropna(subset = ['CountryCustomerID'])
 df_prod_camp_key = df_prod_camp_key.dropna(subset = ['MasterIDNumber_y'])
 
-
-# In[77]:
-
-
+# Filtering the dataframe entries that were actual purchases recorded on the database
+# Also droping extraneous columns for the analysis to be anonymized.
 df_prod_camp_key = df_prod_camp_key.merge(filler_3, on = 'Acctno', how = 'inner')
+df_prod_camp_key.drop(['Account Type','MasterIDNumber_y', 'MasterIDNumber_x', 'Agreement Total', 'FirstName','LastName','RFCreditLimit','AvailableSpend','OutstandingBalance', 'Arrears','No_of_CLN','No_of_HP','CLN_Agrtotal','HP_Agrtotal', 'ServiceCharge', 'TotalInstalments', 'ISO_x', 'WorstStatusCode','MthlyIncome','Birthdate','Gender','Age_y', 'Occupation_y','CountryCustomerID_y','Agreement Total', 'MostRecentAcctno', 'Country_x','Date Account Opened_y','Take-up Bool','Clean_Order', 'Date Account Opened_x', 'Is_Cashloan_Acct','Is_HPorRF_Acct','Is_Both','Item','ItemType', 'ItemCatCode', 'ServiceCharge', 'DivisionCode',  'DepartmentCode', 'ItemNo2', 'ClassCode', 'ClassID', 'ClassName', 'RFCreditLimit_USD', 'AvailableSpend_USD', 'OutstandingBalance_USD', 'Arrears_USD', 'CLN_Agrtotal_USD', 'HP_Agrtotal_USD', 'TotalInstalments_USD', 'MthlyIncome_USD', 'ServiceCharge_USD', 'DatasetLastUpdated', 'HomeTel', 'MobileTel', 'WorkTel', 'Email', 'Country_y', 'CustAddr1', 'CustAddr2', 'CusPOCode', 'Country_y'], axis = 1, inplace = True)
 
-
-# In[78]:
-
-
-df_prod_camp_key.drop(['Account Type','MasterIDNumber_y', 'MasterIDNumber_x', 'Agreement Total',                       'FirstName','LastName','RFCreditLimit','AvailableSpend','OutstandingBalance',                       'Arrears','No_of_CLN','No_of_HP','CLN_Agrtotal','HP_Agrtotal', 'ServiceCharge',                       'TotalInstalments', 'ISO_x', 'WorstStatusCode','MthlyIncome','Birthdate','Gender','Age_y',                       'Occupation_y','CountryCustomerID_y','Agreement Total', 'MostRecentAcctno',                       'Country_x','Date Account Opened_y','Take-up Bool','Clean_Order',                       'Date Account Opened_x', 'Is_Cashloan_Acct','Is_HPorRF_Acct','Is_Both','Item','ItemType',                       'ItemCatCode', 'ServiceCharge', 'DivisionCode',  'DepartmentCode',                        'ItemNo2', 'ClassCode', 'ClassID', 'ClassName', 'RFCreditLimit_USD', 'AvailableSpend_USD',                       'OutstandingBalance_USD', 'Arrears_USD', 'CLN_Agrtotal_USD', 'HP_Agrtotal_USD',                       'TotalInstalments_USD', 'MthlyIncome_USD', 'ServiceCharge_USD', 'DatasetLastUpdated', 'HomeTel',                       'MobileTel', 'WorkTel', 'Email', 'Country_y', 'CustAddr1', 'CustAddr2', 'CusPOCode', 'Country_y'], 
-                      axis = 1, inplace = True)
-
-
-# In[79]:
-
-
-'''lst_Rcnt_Ac = df_prod_camp_key['MostRecentAccount']
+# Adding store Locations for deeper analysis
+lst_Rcnt_Ac = df_prod_camp_key['MostRecentAccount']
 lst_Brnch_Num = []
 for i in range(len(lst_Rcnt_Ac)):
     lst_Brnch_Num.append(lst_Rcnt_Ac[i][:3])
-df_prod_camp_key['StoreID'] = lst_Brnch_Num'''
+df_prod_camp_key['StoreID'] = lst_Brnch_Num
 
+# Reordering the columns in the dataframe
+df_prod_camp_key = df_prod_camp_key[['CountryCustomerID_x','MasterIDNumber','ISO_y', 'DivisionName', 'DepartmentName', 'RfavailablePercent','Acctno', 'Is_Cancelled','DateAccOpenMth','DateAcctOpen', 'AgreementTotal_USD','CampaignCode_x','CampaignCode_y', 'DeliveryFlag', 'DeliveryDate', 'Itemno', 'ItemCategory','Terms Type', 'BranchName','dateborn', 'Age_x','sex','maritalstat','Occupation_x']]
 
-# In[80]:
+# Removing duplicates from primary and secondary keys
+df_prod_camp_key.drop_duplicates(subset = ['CountryCustomerID_x','CampaignCode_x','CampaignCode_y'], keep = 'first', inplace = True)
 
-
-df_prod_camp_key = df_prod_camp_key[['CountryCustomerID_x','MasterIDNumber','ISO_y', 'DivisionName', 'DepartmentName',                                     'RfavailablePercent','Acctno', 'Is_Cancelled','DateAccOpenMth','DateAcctOpen',                                     'AgreementTotal_USD','CampaignCode_x','CampaignCode_y', 'DeliveryFlag', 'DeliveryDate',                                     'Itemno', 'ItemCategory','Terms Type', 'BranchName','dateborn',                                     'Age_x','sex','maritalstat','Occupation_x']]
-
-
-# In[81]:
-
-
-df_prod_camp_key.drop_duplicates(subset = ['CountryCustomerID_x','CampaignCode_x','CampaignCode_y'], keep =                                           'first', inplace = True)
-
-
-# In[82]:
-
-
-'''os.chdir('C:\\Users\\roy_shaw\\Desktop\\Work_Files\\Campaign Analysis')
-df_store = pd.read_excel('Store_Finder-OECS.xlsx', sheet_name = 'Store_Finder-JM')
-lst_StoreID = list(df_store['StoreID'])
-new_StoreID = []
-df_store.drop('StoreID', axis = 1, inplace = True)
-for i in range(len(lst_StoreID)):
-    new_StoreID.append(str(lst_StoreID[i]))
-df_store['StoreID'] = new_StoreID
-df_prod_camp_key = df_prod_camp_key.merge(df_store, how = 'inner', on = 'StoreID')'''
-
-
-# In[83]:
-
-
+# Keying the success criteria for a special campaigns
 df_SFI = df_prod_camp_key[df_prod_camp_key['CampaignCode_x'] == 'SFI']
+
+# Removing elements identified by the special campaign code
 df_prod_camp_key.drop(df_prod_camp_key.index[df_prod_camp_key['CampaignCode_x'] == 'SFI'], inplace = True)
 
-
-# In[84]:
-
-
+# Algorithm to scrutinize the special campaign code and remove values which don't match the criteria to differentiate
 lst_CampCode_off = list(df_prod_camp_key['CampaignCode_x'])
 lst_CampCode_upt = list(df_prod_camp_key['CampaignCode_y'])
 lst_Harmony = []
@@ -261,85 +127,35 @@ for i in range(len(lst_CampCode_off)):
     else:
         lst_Harmony.append(True)
 df_prod_camp_key['Harmony'] = lst_Harmony
-
-
-# In[85]:
-
-
 df_prod_camp_key.drop(df_prod_camp_key.index[df_prod_camp_key['Harmony'] == False], inplace = True)
 df_prod_camp_key.drop('Harmony', axis = 1, inplace = True)
 
-
-# In[86]:
-
-
 df_prod_camp_key = pd.concat([df_prod_camp_key, df_SFI])
 
-
-# In[87]:
-
-
-df_prod_camp_key.drop_duplicates(subset = ['CountryCustomerID_x','CampaignCode_x','CampaignCode_y'], keep =                                           'first', inplace = True)
-
-
-# In[88]:
-
-
+# Removing duplicate values from the dataframe
+df_prod_camp_key.drop_duplicates(subset = ['CountryCustomerID_x','CampaignCode_x','CampaignCode_y'], keep = 'first', inplace = True)
 df_prod_camp_key = df_prod_camp_key.T.drop_duplicates().T
 
-
-# In[89]:
-
-
+# Removing values that may have not been delivered
 df_prod_camp_key = df_prod_camp_key[df_prod_camp_key['DeliveryFlag'] != 'N']
 
-
-# In[90]:
-
-
+# Filtering the values in the dataframe 
 filler_conv = df_main[df_main['ISO'] == 'JM']
 
 
-# In[91]:
-
-
+# Checking the converted sales from the campaign for analysis
 filler_conv['Conversion'] = filler_conv['CountryCustomerID'].isin(df_prod_camp_key['CountryCustomerID_x'])
 
-
-# In[92]:
-
-
-filler_conv['Conversion'].value_counts()
-
-
-# ##### Change Date Here
-
-# In[93]:
-
-
-import datetime
-date_ = datetime.date(2023, 3, 1)
-
-
-# #### Important! resurface this input if required
-
-# In[94]:
-
-
-'''cust_life = []
+# Inserting a variable for the customer lifetime for demographic analysis
+cust_life = []
 trans_date = list(pd.to_datetime(df_prod_camp_key['EarliestDateAcctOpen']).apply(lambda x: x.date()))
 end_date_cur = [date_]*len(trans_date)
 for trn,end in zip(trans_date, end_date_cur):
     delta = (end-trn).days/365.25
     cust_life.append(delta)
-df_prod_camp_key['Customer Lifetime'] = cust_life'''
+df_prod_camp_key['Customer Lifetime'] = cust_life
 
-#df_prod_camp_key['Customer Lifetime']
-
-
-# In[95]:
-
-
+# Grouping the occupational data based on job profile on the official criteria on world bank
 df_prod_camp_key['Occupation_x'].replace(to_replace = {"Business Owner".upper():"Managers","Civil Servant".upper():"Professional","Comm Agents".upper():"Technicians & Associate Professionals","Comm Agents":"Technicians & Associate Professionals","Domestic/Janitor".upper():"Elementary Occupations","Driver".upper():"Plant/Machine Operators/Assemblers","Entertainment".upper():"Professional","Factory Workers".upper():"Elementary Occupations",
                                                        "Farming".upper():"Skilled Agriculture/Forestry/Fishery Workers","Fisherman".upper():"Skilled Agriculture/Forestry/Fishery Workers","Forces".upper():"Armed Forces","Forces":"Armed Forces","Hotel Staff".upper():"Service and Sales Workers","Managerial".upper():"Managers","Manual/Labourer".upper():"Elementary Occupations","Minibus Driver".upper():"Plant/Machine Operators/Assemblers",
                                                        "Nurse".upper():"Technicians & Associate Professionals","Police".upper():"Armed Forces","Professional".upper():"Professional","Restuarant/Bar".upper():"Service and Sales Workers","Retail".upper():"Service and Sales Workers","Security".upper():"Elementary Occupations","Skilled Trade".upper():"Technicians & Associate Professionals","Taxi Driver".upper():"Plant/Machine Operators/Assemblers", 
@@ -354,16 +170,7 @@ df_prod_camp_key['Occupation_x'].replace(to_replace = {"Business Owner".upper():
                                                         "ROOF INSTALLER":"Craft and Related Trades Workers", "OPERATIONS":"Professional", "REAL ESTATE OWNER":"Other","LINES MAN":"Craft and Related Trades Workers","FINANCIAL CONTROLLER":"Professional","MAIL CARRIER":"Clerical Support Workers","GALLEY STEWARD":"Elementary Occupations", "FOREMAN":"Plant/Machine Operators/Assemblers", "REAL ESTATE AGENT":"Professional","VETENARIAN":"Professional","PHOTOGRAPHER":"Service and Sales Workers","JDF":"Armed Forces",
                                                       "FLIGHT ATTENDANT":"Services and Sales Workers", "Retail":"Service and Sales Workers","Hotel Staff":"Service and Sales Workers"}, inplace=True)
 
-
-# In[96]:
-
-
-df_prod_camp_key['Occupation_x'].unique()
-
-
-# In[97]:
-
-
+# Creating a field for the generational demographics
 from datetime import datetime
 start_gen_Z = datetime.strptime('01/1/1997','%d/%m/%Y').date()
 end_gen_Z = datetime.strptime('31/12/2012','%d/%m/%Y').date()
@@ -378,10 +185,7 @@ end_boom_1 = datetime.strptime('31/12/1954','%d/%m/%Y').date()
 start_post = datetime.strptime('01/1/1928','%d/%m/%Y').date()
 end_post = datetime.strptime('31/12/1945','%d/%m/%Y').date()
 
-
-# In[98]:
-
-
+# Assigning generational demographics to the data
 lst = []
 lst_pre = list(filler_conv['dateborn'])
 for i in range(len(lst_pre)):
@@ -406,71 +210,23 @@ for i in range(len(lst_pre)):
     else:
         lst.append('WW2')
         i+=1
-        
 filler_conv['Age Group'] = lst
 
-
-# In[99]:
-
-
-lst = []
-lst_pre = list(df_prod_camp_key['dateborn'])
-for i in range(len(lst_pre)):
-    if ((pd.to_datetime(lst_pre[i], dayfirst = True) >= start_gen_Z) & (pd.to_datetime(lst_pre[i], dayfirst = True) <= end_gen_Z)):
-        lst.append('Gen Z')
-        i+=1
-    elif ((pd.to_datetime(lst_pre[i], dayfirst = True) >= start_mil) & (pd.to_datetime(lst_pre[i], dayfirst = True) <= end_mil)):
-        lst.append('Millenial')
-        i+=1
-    elif ((pd.to_datetime(lst_pre[i], dayfirst = True) >= start_gen_X) & (pd.to_datetime(lst_pre[i], dayfirst = True) <= end_gen_X)):
-        lst.append('Gen X')
-        i+=1
-    elif ((pd.to_datetime(lst_pre[i], dayfirst = True) >= start_boom_2) & (pd.to_datetime(lst_pre[i], dayfirst = True) <= end_boom_2)):
-        lst.append('Boomers 2')
-        i+=1
-    elif ((pd.to_datetime(lst_pre[i], dayfirst = True) >= start_boom_1) & (pd.to_datetime(lst_pre[i], dayfirst = True) <= end_boom_1)):
-        lst.append('Boomers 1')
-        i+=1
-    elif ((pd.to_datetime(lst_pre[i], dayfirst = True) >= start_post) & (pd.to_datetime(lst_pre[i], dayfirst = True) <= end_post)):
-        lst.append('Post War')
-        i+=1
-    else:
-        lst.append('WW2')
-        i+=1
-        
-df_prod_camp_key['Age Group'] = lst
-
-
-# In[100]:
-
-
+# Creating a table to function as a guide for the analysis
 from tabulate import tabulate
 table = [['Generation Label', 'Age-Group'], ['Gen Z','18-25'],['Millenial','26-41'],['Gen X','42-57'],['Boomers 2','58-67'],['Boomers 1','68-76'],['Post War','77-94'],['WW2','>95']]
 print(tabulate(table, headers = "firstrow"))
 
-
-# #### Change date here
-
-# In[101]:
-
-
+# Assigning the YearMonth value to an attribute in the dataframe
 df_prod_camp_key['YearMonth'] = ['202303']*len(df_prod_camp_key['CountryCustomerID_x'])
 filler_conv['YearMonth'] = ['202303']*len(filler_conv['CountryCustomerID'])
 
-
-# #### Change date here
-
-# In[102]:
-
-
+# Writing both dataframes one for conversions and the other for overall textblast sent. 
 with pd.ExcelWriter(r'C:\Users\roy_shaw\Desktop\output_Mar_FY23_JM.xlsx') as writer:
     df_prod_camp_key.to_excel(writer, sheet_name = 'Main')
     filler_conv.to_excel(writer, sheet_name = 'Aggregate')
 
-
-# In[108]:
-
-
+# Writing separate files for the respective months to one excel aggregate into one document one housing the converted audience and the other holding the overall campaign audience.
 lst_file_name = []
 df_agg_main = pd.DataFrame()
 df_agg_supp = pd.DataFrame()
@@ -490,35 +246,13 @@ for i in range(len(lst_set_file_name)):
 df_front = df_agg_main.to_csv(r'C:\\Users\\roy_shaw\\Desktop\\Work_Files\\Campaign Analysis\\df_main_agg_JM.csv', index = False, encoding = 'utf-8')
 df_escrt = df_agg_supp.to_csv(r'C:\\Users\\roy_shaw\\Desktop\\Work_Files\\Campaign Analysis\\df_agg_totl_JM.csv', index = False, encoding = 'utf-8')           
 
-
-# In[3]:
-
-
-os.chdir('C:\\Users\\roy_shaw\\Desktop\\Work_Files\\Campaign Analysis')
-df_agg_main = pd.read_csv('df_main_agg_JM.csv')
-
-
-# In[4]:
-
-
+#Analysis of the Hire Purchase items so we remove the extraneous information to purchases from the dataframe
 exclude_items = ['DT', 'ADMIN', 'LOAN', 'PPP', 'SD', 'RASTP1', 'RASTB3']
 df_agg_main_HP = df_agg_main[~df_agg_main['Itemno'].isin(exclude_items)]
-
-
-# In[5]:
-
-
 df_agg_main_HP['ItemCategory'].value_counts()
 
-
-# In[6]:
-
-
+#Determining the category of purchased items to create a portfolio of assets for each age group and location (based on company best practices) for how campaigns are distributed.
 df_agg_main_HP['DepartmentName'].value_counts().to_csv(r'C:\Users\roy_shaw\Desktop\categories_ttl_JM.csv')
-
-
-# In[7]:
-
 
 lst_prod = list(df_agg_main_HP['DepartmentName'])
 lst_cleaned = []
@@ -528,54 +262,19 @@ for i in range(len(lst_prod)):
     else:
         continue
 df_agg_main_HP['DepartmentName'] = lst_cleaned
-
-
-# In[8]:
-
-
 df_agg_main_HP['DepartmentName'].unique()
-
-
-# In[10]:
-
-
 df_agg_main = df_agg_main[df_agg_main['Is_Cancelled'] == 'N']
-
-
-# In[48]:
-
-
 df_agg_main_HP['BranchName'].unique()
 
+# Approach Alpha - HP portfolio optimization with correlation of asset classes (deptartment types).
 
-# In[11]:
+# Correlation Matrix by Age
 
-
-'''from matplotlib import rcParams
-rcParams['figure.figsize'] = 12, 9'''
-
-
-# In[12]:
-
-
-#Monthly_Margins_Count = 12
-
-
-# ## Approach Alpha - HP
-
-# #### Probability Matrix by Age
-
-# In[22]:
-
-
-dept_type = ['WASHING MACHINE AND DRYER', 'SMALL APPLIANCES', 'FRIDGE', 'STOVES', 'OPTICAL ACCESSORIES',              'AUDIO', 'LOUNGE', 'LENSES', 'BEDDING', 'DINING', 'LAPTOPS', 'VISION', 'BEDROOM', 'OUTDOOR',              'KITCHEN', 'INDIVIDUAL SPORT', 'ACCESSORIES AND OTHERS', 'DECORATIVE ACCESSORIES', 'TV AND ACCESORIES',              'COMPUTER', 'ASHLEY STATIONARY', 'CELLPHONES AND ACCESSORIES', 'REGULAR FRAMES', 'VENTILATION',              'FURNITURE OCCASIONAL MISC', 'COMPUTER AND ACCESSORIES', 'AUDIO RSK', 'HARDWARE', 'HEADPHONES EARPHONES',              'OFFICE', 'BAGS', 'SEWING MACHINES', 'HOUSEWARES', 'ASHLEY DINING', 'ASHLEY MOTION', 'ASHLEY BEDDING',              'TABLETS', 'PREMIUM FRAMES', 'ASHLEY MASTER BEDROO', 'ASHLEY ENTERTAINMENT', 'CAMPING', 'OUTDOOR SPORT',             'STORAGE AND ORGANIZATION', 'ASHLEY ACCENTS', 'GAMING CONSOLES', 'SUNGLASSES', 'ASHLEY OUTDOOR',             'COOLING AND HEATING', 'SPARE PARTS FOR ELECTRICAL', 'FLOOR COVERINGS', 'HOME AND OFFICE', 'CONTACT LENSES',             'MUSIC', 'VEHICLES ACCESSORIES', 'ELECTRICAL GENERATORS', 'LIGHTING', 'ASHLEY RUGS', 'ASHLEY OCCASIONAL',             'REPO FURNITURE', 'SECURITY SYSTEM', 'BABY GOODS', 'ASHLEY SECTIONALS', 'PERSONAL CARE',             'ASHLEY HOME OFFICE', 'DIGITAL STORAGE', 'REPO ELECTRICAL', 'REPO PCS', 'TRANSPORT', 'HEALTH',             'BICYCLES', 'GAMING PCS', 'OFFICE SYSTEM', 'OTHERS RSK PRODUCTS', 'nan', 'MUSICAL INSTRUMENTS']
+dept_type = ['WASHING MACHINE AND DRYER', 'SMALL APPLIANCES', 'FRIDGE', 'STOVES', 'OPTICAL ACCESSORIES', 'AUDIO', 'LOUNGE', 'LENSES', 'BEDDING', 'DINING', 'LAPTOPS', 'VISION', 'BEDROOM', 'OUTDOOR', 'KITCHEN', 'INDIVIDUAL SPORT', 'ACCESSORIES AND OTHERS', 'DECORATIVE ACCESSORIES', 'TV AND ACCESORIES', 'COMPUTER', 'ASHLEY STATIONARY', 'CELLPHONES AND ACCESSORIES', 'REGULAR FRAMES', 'VENTILATION', 'FURNITURE OCCASIONAL MISC', 'COMPUTER AND ACCESSORIES', 'AUDIO RSK', 'HARDWARE', 'HEADPHONES EARPHONES', 'OFFICE', 'BAGS', 'SEWING MACHINES', 'HOUSEWARES', 'ASHLEY DINING', 'ASHLEY MOTION', 'ASHLEY BEDDING', 'TABLETS', 'PREMIUM FRAMES', 'ASHLEY MASTER BEDROO', 'ASHLEY ENTERTAINMENT', 'CAMPING', 'OUTDOOR SPORT', 'STORAGE AND ORGANIZATION', 'ASHLEY ACCENTS', 'GAMING CONSOLES', 'SUNGLASSES', 'ASHLEY OUTDOOR', 'COOLING AND HEATING', 'SPARE PARTS FOR ELECTRICAL', 'FLOOR COVERINGS', 'HOME AND OFFICE', 'CONTACT LENSES', 'MUSIC', 'VEHICLES ACCESSORIES', 'ELECTRICAL GENERATORS', 'LIGHTING', 'ASHLEY RUGS', 'ASHLEY OCCASIONAL', 'REPO FURNITURE', 'SECURITY SYSTEM', 'BABY GOODS', 'ASHLEY SECTIONALS', 'PERSONAL CARE', 'ASHLEY HOME OFFICE', 'DIGITAL STORAGE', 'REPO ELECTRICAL', 'REPO PCS', 'TRANSPORT', 'HEALTH', 'BICYCLES', 'GAMING PCS', 'OFFICE SYSTEM', 'OTHERS RSK PRODUCTS', 'nan', 'MUSICAL INSTRUMENTS']
 
 age_coeff = ['Gen Z', 'Millenial', 'Gen X', 'Boomers 2', 'Boomers 1', 'Post War', 'WW2']
 
-
-# In[39]:
-
-
+# Creating coefficient matrix by age
 count_matrix = {}
 for i in range(len(age_coeff)):
     for j in range(len(dept_type)):
@@ -584,36 +283,14 @@ for i in range(len(age_coeff)):
         count_matrix[(age_coeff[i], dept_type[j])] = val_
         j+=1
     i+=1
-
-
-# In[41]:
-
-
 columns = list(set([key[0] for key in count_matrix.keys()]))
 rows = list(set([key[1] for key in count_matrix.keys()]))
-
-
-# In[44]:
-
-
 df_count = pd.DataFrame(index=rows, columns=columns)
 for key, value in count_matrix.items():
     df_count.loc[key[1], key[0]] = value
 
-
-# In[45]:
-
-
-df_count
-
-
-# #### Correlation by Location
-
-# In[126]:
-
-
+# Creating correlation by location
 rows= []
-
 for var1 in df_encoded_1:
     col = []
     for var2 in df_encoded_1:
@@ -623,21 +300,10 @@ for var1 in df_encoded_1:
     cramers_results = np.array(rows)
 df2 = pd.DataFrame(cramers_results, columns = df_encoded_1.columns, index =df_encoded_1.columns)
 
-
-# In[127]:
-
-
+# Creating optimization algorithm for age group 
+#Generating output for correlations by age and location
 df.to_csv(r'C:\Users\roy_shaw\Desktop\temp_corr_age_JM_rev.csv')
-
-
-# In[128]:
-
-
 df2.to_csv(r'C:\Users\roy_shaw\Desktop\temp_corr_correct_loc_JM.csv')
-
-
-# In[141]:
-
 
 # Step 1: Calculate total sales for each age group and retail category
 total_sales_age = df_agg_main_HP.groupby(['Age Group'])['AgreementTotal_USD'].sum()
@@ -708,16 +374,10 @@ allocation_df = pd.DataFrame(allocation_data)
 # Reshape the dataframe
 allocation_pivot = allocation
 
-
-# In[142]:
-
-
+# Generating output
 allocation_df.to_csv(r'C:\Users\roy_shaw\Desktop\allocation_JM.csv')
 
-
-# In[149]:
-
-
+# Creating optimization algorithm by location
 # Step 1: Calculate total sales for each location and retail category
 total_sales_post = df_agg_main_HP.groupby(['BranchName'])['AgreementTotal_USD'].sum()
 total_sales_category = df_agg_main_HP.groupby(['DepartmentName'])['AgreementTotal_USD'].sum()
@@ -789,42 +449,22 @@ for post_group in post_groups:
 
 allocation_df = pd.DataFrame(allocation_data)
 
-# Reshape the dataframe
+# export to a dataframe
 allocation_pivot = allocation        
 allocation_df = pd.DataFrame(allocation_data)
 
-
-# In[150]:
-
-
+#export to csv
 allocation_df.to_csv(r'C:\Users\roy_shaw\Desktop\allocation_loc_JM.csv')
 
-
-# ## Approach Beta
-
-# In[1]:
-
-
+# Generating algorithm for portfolio theory analysis for optimized portfolio of assets (based on margins, location and age)
 class Asset:
     pass
 
-
-# In[2]:
-
-
 Monthly_Margins_Count = 12
-
-
-# In[5]:
-
 
 directory = r"C:\Users\roy_shaw\Desktop\Work_Files\Campaign Analysis\Cleaned Data-OECS"
 os.chdir(directory)
 df_explore = pd.read_excel('margin_data.xlsx', sheet_name = 'JAM FY20-FY23')
-
-
-# In[6]:
-
 
 class Asset:
     def __init__(self, name: str, sales_history: pd.DataFrame):
@@ -832,29 +472,11 @@ class Asset:
         self.expected_sales = np.mean(self.monthly_sales)
         self.total_sales = np.sum(self.monthly_sales)
 
-
-# In[7]:
-
-
 df_agg_main = pd.read_csv(r'C:\\Users\\roy_shaw\\Desktop\\Work_Files\\Campaign Analysis\\df_main_agg_JM.csv')
-
-
-# In[8]:
-
-
 df_dummy_input = df_agg_main[['Age Group', 'ItemCategory']]
-#df_dummy_input_1 = df_agg_main[['AddressLine2', 'ItemCategory']]
-
-
-# In[9]:
-
-
+df_dummy_input_1 = df_agg_main[['AddressLine2', 'ItemCategory']]
 df_encoded = pd.get_dummies(df_dummy_input)
-#df_encoded_1 = pd.get_dummies(df_dummy_input_1)
-
-
-# In[10]:
-
+df_encoded_1 = pd.get_dummies(df_dummy_input_1)
 
 def cramers_v(x, y):
     confusion_matrix = pd.crosstab(x, y)
@@ -867,10 +489,6 @@ def cramers_v(x, y):
     kcorr = k - ((k-1)**2)/(n-1)
     v = np.sqrt(phi2corr / min((kcorr-1), (rcorr-1)))
     return v
-
-
-# In[11]:
-
 
 rows= []
 
@@ -887,36 +505,17 @@ df = pd.DataFrame(cramers_results, columns = df_encoded.columns, index =df_encod
 
 # Function to find correlation between two categorical column variables in a dataframe
 
-# In[12]:
-
-
 df_agg_main['ItemCategory'].unique()
-
-
-# In[13]:
-
 
 from functools import cache
 from typing import List, Tuple
 from scipy.optimize import minimize
 
-
-# In[14]:
-
-
 num_weights = 21
 weights = np.random.random(num_weights)
 weights /= np.sum(weights)
 
-
-# In[15]:
-
-
 print(list(weights))
-
-
-# In[16]:
-
 
 class Asset:
     pass
@@ -1021,20 +620,12 @@ class Portfolio:
     def __repr__(self):
         return f'<Portfolio assets={[asset.name for asset in self.assets]}, expected return={self.expected_return}, variance={self.variance}>'
 
-
-# In[17]:
-
-
 def margins_retrieve_data(categories: List[str], df_values: pd.DataFrame):
     dataframes = []
     for cat_name in categories:
         val_margins = df_values[df_values['Category'] == cat_name]
         dataframes.append(val_margins)
     return dataframes
-
-
-# In[18]:
-
 
 stock_supply = ['Major White', 'Bedding', 'Business Equipment', 'Vision', 'Small Appliances', 'Accessories',                'Bedroom', 'Radio Shack', 'Occasional/Misc.', 'PCs & Notebooks', 'Lounge', 'Dining Room', 'Spare Parts',
                'Gaming', 'Home', 'Floor Coverings', 'Transport', 'Second Hand', 'Free Gift', 'Audio', 'Optical']
@@ -1046,15 +637,7 @@ split_margin_dataframes = margins_retrieve_data(stock_supply, margins_dataframes
 
 assets = tuple([Asset(name, margin_df) for name, margin_df in zip(stock_supply, split_margin_dataframes)])
 
-
-# In[19]:
-
-
 assets.__repr__()
-
-
-# In[20]:
-
 
 X = []
 y = []
@@ -1092,10 +675,6 @@ plt.ylabel('Portfolio expected (logarithmic) return')
 plt.legend(loc='lower right')
 plt.show()
 
-
-# In[21]:
-
-
 pd.options.display.float_format = "{:,.5f}".format
 
 portfolio = Portfolio(assets)
@@ -1128,27 +707,6 @@ display(
 )
 
 
-# ## Retail Stats to advance Unicomer
-
-# In[ ]:
-
-
-df_agg_main['']
-
-
-# In[ ]:
-
-
-groups = df_agg_main.groupby(['ItemCategory', 'AgreementTotal'], axis = 0)
-
-
-# In[ ]:
-
-
-groups['AgreementTotal'].sum()
-
-
-# In[ ]:
 
 
 

@@ -1,3 +1,5 @@
+#This script serves to create an interactive dashboard for data stored on GitHub
+
 import pandas as pd
 import os
 import datetime
